@@ -20,6 +20,6 @@ public final class PreviewActivity extends Activity {
   View.OnClickListener click=v->{if(running||!ValueAnimator.areAnimatorsEnabled())return;running=true;play.setEnabled(false);
    Bitmap bmp=null;try{bmp=ParticleEffect.sample(icon.getDrawable());if(ParticleEffect.play(stage,bmp,new RectF(icon.getLeft(),icon.getTop(),icon.getRight(),icon.getBottom()))){icon.setAlpha(0);stage.postDelayed(()->{icon.setAlpha(1);running=false;play.setEnabled(true);},750);}else{running=false;play.setEnabled(true);}}catch(RuntimeException e){running=false;play.setEnabled(true);icon.setAlpha(1);}finally{if(bmp!=null)bmp.recycle();}
   };play.setOnClickListener(click);icon.setOnClickListener(click);
-  TextView guide=new TextView(this);guide.setText("LSPosed → One UI Home only → restart launcher.\nExperimental 0.2 alpha");guide.setTextColor(0xffc1c0ce);guide.setPadding(0,dp(20),0,0);page.addView(guide);setContentView(page);
+  TextView guide=new TextView(this);guide.setText("LSPosed → One UI Home only → restart launcher.\nExperimental 0.3 alpha");guide.setTextColor(0xffc1c0ce);guide.setPadding(0,dp(20),0,0);page.addView(guide);setContentView(page);
  }
 }

@@ -11,3 +11,6 @@ The supplied launcher declares IconContainer.getRemoveAnimation(Function0): Anim
 
 ## Install/test
 Get the APK from Actions > successful build > Artifacts. Install, enable in LSPosed, scope One UI Home only, restart launcher or reboot. Preview is available without root. Remove a disposable shortcut and check logs for AppDeleteFX 0.2. Disable module if launcher misbehaves. One UI 8 compatibility is unverified. Debug APK is for testing; persistent signing needed for updates.
+
+## 0.3 alpha
+New uninstall path captures the exact selected icon before the confirmation dialog and listens for successful removal via LauncherApps.Callback for the current user. Renders once the launcher is visible/focused and the original icon is gone. Launcher-owned uninstall popup dim is disabled only for its own WindowManager call; normal package installer activity may still dim. No change to confirmation or package operations. Brighter and denser particle glints, shorter breakup. Firmware behavior and exact match remain unverified.

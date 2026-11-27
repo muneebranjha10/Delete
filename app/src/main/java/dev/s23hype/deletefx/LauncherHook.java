@@ -10,8 +10,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public final class LauncherHook implements IXposedHookLoadPackage {
  private static final String PKG="com.sec.android.app.launcher",ICON="com.honeyspace.ui.common.iconview.IconContainer";
  private static boolean installed,warned;
+ private static UninstallBridge uninstall;
  public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpp){
   if(!PKG.equals(lpp.packageName)||!PKG.equals(lpp.processName)||installed)return;
+  try{uninstall=UninstallBridge.install(lpp.classLoader);}catch(Throwable t){XposedBridge.log("AppDeleteFX uninstall hook unavailable: "+t);}
   try{
    Class<?> cls=Class.forName(ICON,false,lpp.classLoader),callback=Class.forName("kotlin.jvm.functions.Function0",false,lpp.classLoader);
    Method remove=cls.getDeclaredMethod("getRemoveAnimation",callback);
@@ -21,11 +23,14 @@ public final class LauncherHook implements IXposedHookLoadPackage {
     protected void afterHookedMethod(MethodHookParam p){
      if(p.hasThrowable()||!(p.getResult() instanceof AnimatorSet)||Looper.myLooper()!=Looper.getMainLooper())return;
      try{
-      View container=(View)p.thisObject;AnimatorSet original=(AnimatorSet)p.getResult();
+      View container=(View)p.thisObject;
+      if(uninstall!=null&&uninstall.owns(container))return;
+      AnimatorSet original=(AnimatorSet)p.getResult();
       original.addListener(new AnimatorListenerAdapter(){
        private boolean played; private View hidden;private float oldAlpha;
        public void onAnimationStart(Animator a){
         if(played)return;played=true;
+        if(uninstall!=null&&uninstall.owns(container))return;
         try{
          View child=render(container,getIcon,getPosition,getChild);
          if(child!=null&&child!=container){oldAlpha=child.getAlpha();hidden=child;child.setAlpha(0f);}
@@ -38,7 +43,7 @@ public final class LauncherHook implements IXposedHookLoadPackage {
      }catch(Throwable t){warn(t);}
     }
    });
-   installed=true;XposedBridge.log("AppDeleteFX 0.2: installed IconContainer removal hook");
+   installed=true;XposedBridge.log("AppDeleteFX 0.3: installed IconContainer removal hook");
   }catch(Throwable t){warn(t);}
  }
  private static View render(View container,Method getIcon,Method getPosition,Method getChild)throws Exception{
