@@ -19,6 +19,8 @@ final class UninstallBridge {
  private final Class<?> iconClass,utilsClass;
  private final Handler main=new Handler(Looper.getMainLooper());
  private Pending pending;
+ private WeakReference<View> lastAnimated=new WeakReference<>(null);
+ private long lastAnimatedAt;
  private TouchSnapshot touch;
  private final class TouchSnapshot {
   final WeakReference<View> root,anchor;final int id;final RectF box;final Bitmap bitmap;final long at;
@@ -95,7 +97,9 @@ final class UninstallBridge {
   log("uninstall path installed");return b;
  }
  boolean owns(View view){
-  Pending q=pending;if(q==null)return false;
+  Pending q=pending;
+  if(lastAnimated.get()==view&&SystemClock.uptimeMillis()-lastAnimatedAt<2200)return true;
+  if(q==null)return false;
   try{return q.anchor.get()==view;}catch(Throwable ignored){return false;}
  }
  private void capture(Object option){
@@ -254,10 +258,24 @@ final class UninstallBridge {
     }
    }catch(Throwable ignored){}
   }
-  if(ParticleEffect.play(r,q.bitmap,q.box,confirmed)){
-   q.played=true;log(confirmed?"confirmed uninstall particles played":"immediate uninstall transition started");
-   main.postDelayed(()->restoreVisual(q),ParticleMath.DURATION_MS+40);
+  if(ParticleEffect.alreadyPlayed(r,q.box)||ParticleEffect.play(r,q.bitmap,q.box,confirmed)){
+   q.played=true;lastAnimated=new WeakReference<>(a);lastAnimatedAt=SystemClock.uptimeMillis();log(confirmed?"confirmed uninstall particles played":"immediate uninstall transition started");
+   main.postDelayed(()->finishVisual(q,0),ParticleMath.DURATION_MS+40);
   }else restoreVisual(q);
+ }
+ private void finishVisual(Pending q,int tries){
+  if(q.hidden==null)return;
+  View a=q.anchor.get(),h=q.hidden.get();
+  if(a==null||h==null||!a.isAttachedToWindow()){restoreVisual(q);return;}
+  try{
+   if(((Integer)XposedHelpers.callMethod(a,"getItemId"))!=q.hiddenId){restoreVisual(q);return;}
+  }catch(Throwable t){restoreVisual(q);return;}
+  // Avoid showing the source icon again while launcher is still processing removal.
+  // Bound suppression to 2.5 seconds after the visual to avoid hiding a retained app.
+  if(tries<25&&(q.confirmed||pending==q)&&a.isShown()){
+   main.postDelayed(()->finishVisual(q,tries+1),100);return;
+  }
+  restoreVisual(q);
  }
  private void restoreVisual(Pending q){
   if(q==null||q.hidden==null)return;
@@ -282,5 +300,5 @@ final class UninstallBridge {
   if(q.receiverContext!=null){try{q.receiverContext.unregisterReceiver(q.removalReceiver);}catch(RuntimeException ignored){}q.receiverContext=null;}
   if(!q.bitmap.isRecycled())q.bitmap.recycle();
  }
- private static void log(String msg){XposedBridge.log("AppDeleteFX 0.6: "+msg);}
+ private static void log(String msg){XposedBridge.log("AppDeleteFX 0.7: "+msg);}
 }

@@ -13,7 +13,7 @@ public final class LauncherHook implements IXposedHookLoadPackage {
  private static UninstallBridge uninstall;
  public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpp){
   if(!PKG.equals(lpp.packageName)||!PKG.equals(lpp.processName)||installed)return;
-  XposedBridge.log("AppDeleteFX 0.6: launcher loaded "+lpp.processName);
+  XposedBridge.log("AppDeleteFX 0.7: launcher loaded "+lpp.processName);
   try{uninstall=UninstallBridge.install(lpp.classLoader);}catch(Throwable t){XposedBridge.log("AppDeleteFX uninstall hook unavailable: "+t);}
   try{
    Class<?> cls=Class.forName(ICON,false,lpp.classLoader),callback=Class.forName("kotlin.jvm.functions.Function0",false,lpp.classLoader);
@@ -44,7 +44,7 @@ public final class LauncherHook implements IXposedHookLoadPackage {
      }catch(Throwable t){warn(t);}
     }
    });
-   installed=true;XposedBridge.log("AppDeleteFX 0.6: installed IconContainer removal hook");
+   installed=true;XposedBridge.log("AppDeleteFX 0.7: installed IconContainer removal hook");
   }catch(Throwable t){warn(t);}
  }
  private static View render(View container,Method getIcon,Method getPosition,Method getChild)throws Exception{

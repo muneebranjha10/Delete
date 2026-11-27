@@ -3,10 +3,16 @@ import android.animation.*;
 import android.graphics.*;
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.Choreographer;
+import android.os.SystemClock;
+import java.util.WeakHashMap;
 import android.view.animation.LinearInterpolator;
 import java.util.Random;
 final class ParticleEffect extends Drawable {
  private static final int GRID=36,MAX=GRID*GRID;
+ private static final WeakHashMap<View,Recent> recent=new WeakHashMap<>();
+ private static final class Recent {final RectF box;final long at;Recent(RectF b){box=new RectF(b);at=SystemClock.uptimeMillis();}}
+ static boolean alreadyPlayed(View root,RectF box){Recent r=recent.get(root);return r!=null&&SystemClock.uptimeMillis()-r.at<2200&&Math.abs(r.box.centerX()-box.centerX())<box.width()*.6f&&Math.abs(r.box.centerY()-box.centerY())<box.height()*.6f;}
  private final float[] x=new float[MAX],y=new float[MAX],vx=new float[MAX],vy=new float[MAX],radius=new float[MAX],delay=new float[MAX],phase=new float[MAX],life=new float[MAX];
  private final int[] colors=new int[MAX];
  private final boolean[] spark=new boolean[MAX];
@@ -24,16 +30,16 @@ final class ParticleEffect extends Drawable {
   int[] pixels=new int[GRID*GRID];image.getPixels(pixels,0,GRID,0,0,GRID,GRID);
   for(int gy=0;gy<GRID;gy++)for(int gx=0;gx<GRID;gx++){
    int color=pixels[gy*GRID+gx];if(Color.alpha(color)<55)continue;
-   if(rand.nextFloat()>.36f)continue;
+   if(rand.nextFloat()>.62f)continue;
    int i=count++;
    float px=(gx+.15f+rand.nextFloat()*.7f)/GRID,py=(gy+.15f+rand.nextFloat()*.7f)/GRID;
    x[i]=(px-.5f)*box.width();y[i]=(py-.5f)*box.height();
    float a=(float)Math.atan2(y[i],x[i])+(rand.nextFloat()-.5f)*2.9f;
-   float speed=size*(.24f+1.65f*(float)Math.pow(rand.nextFloat(),1.05));
+   float speed=size*(.18f+1.35f*(float)Math.pow(rand.nextFloat(),1.15));
    vx[i]=(float)Math.cos(a)*speed;vy[i]=(float)Math.sin(a)*speed;
    radius[i]=Math.max(.38f,size*(.006f+.008f*(float)Math.pow(rand.nextFloat(),2)));
    delay[i]=rand.nextFloat()*.045f;phase[i]=rand.nextFloat()*6.283f;
-   life[i]=.72f+.28f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.40f;
+   life[i]=.89f+.11f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.48f;
   }
  }
  static Bitmap sample(Drawable icon){
@@ -46,18 +52,27 @@ final class ParticleEffect extends Drawable {
  static boolean play(View root,Bitmap sampled,RectF box){return play(root,sampled,box,false);}
  static boolean play(View root,Bitmap sampled,RectF box,boolean burstOnly){
   if(!root.isAttachedToWindow()||root.getWidth()<=0||root.getHeight()<=0||!ValueAnimator.areAnimatorsEnabled())return false;
+  if(alreadyPlayed(root,box))return false;
   ParticleEffect fx=new ParticleEffect(sampled,box);fx.burstOnly=burstOnly;
   if(fx.count==0){fx.image.recycle();return false;}
   fx.setBounds(0,0,root.getWidth(),root.getHeight());
-  ValueAnimator anim=ValueAnimator.ofFloat(0,1);anim.setDuration(ParticleMath.DURATION_MS);anim.setInterpolator(new LinearInterpolator());
-  View.OnAttachStateChangeListener attach=new View.OnAttachStateChangeListener(){
+  // Real elapsed frame time, independent of nonzero system animator-scale settings.
+  final class Playback implements Choreographer.FrameCallback,View.OnAttachStateChangeListener {
+   long first=-1;boolean done;
+   public void doFrame(long nanos){
+    if(done)return;
+    if(!root.isAttachedToWindow()){finish();return;}
+    if(first<0)first=nanos;
+    fx.time=ParticleMath.clamp((nanos-first)/(ParticleMath.DURATION_MS*1000000f));fx.invalidateSelf();
+    if(fx.time>=1f)finish();else Choreographer.getInstance().postFrameCallback(this);
+   }
    public void onViewAttachedToWindow(View v){}
-   public void onViewDetachedFromWindow(View v){anim.cancel();}
-  };
-  anim.addUpdateListener(a->{fx.time=(Float)a.getAnimatedValue();fx.invalidateSelf();});
-  anim.addListener(new AnimatorListenerAdapter(){public void onAnimationEnd(Animator a){root.getOverlay().remove(fx);root.removeOnAttachStateChangeListener(attach);}});
-  root.getOverlay().add(fx);root.addOnAttachStateChangeListener(attach);
-  try{anim.start();return true;}catch(RuntimeException e){root.getOverlay().remove(fx);root.removeOnAttachStateChangeListener(attach);throw e;}
+   public void onViewDetachedFromWindow(View v){finish();}
+   void finish(){if(done)return;done=true;Choreographer.getInstance().removeFrameCallback(this);root.getOverlay().remove(fx);root.removeOnAttachStateChangeListener(this);}
+  }
+  Playback playback=new Playback();
+  try{root.getOverlay().add(fx);root.addOnAttachStateChangeListener(playback);recent.put(root,new Recent(box));Choreographer.getInstance().postFrameCallback(playback);return true;}
+  catch(RuntimeException e){recent.remove(root);playback.finish();throw e;}
  }
  @Override public void draw(Canvas c){
   float breakup=burstOnly?ParticleMath.clamp(time/.035f):ParticleMath.breakup(time),collapse=burstOnly?.88f:ParticleMath.collapse(time);
