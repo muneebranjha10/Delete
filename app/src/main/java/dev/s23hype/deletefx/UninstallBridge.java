@@ -123,7 +123,9 @@ final class UninstallBridge {
   UserManager um=app.getSystemService(UserManager.class);
   if(um==null||um.isManagedProfile()||um.hasUserRestriction(UserManager.DISALLOW_UNINSTALL_APPS))return false;
   android.app.admin.DevicePolicyManager dpm=app.getSystemService(android.app.admin.DevicePolicyManager.class);
-  if(dpm==null||dpm.packageHasActiveAdmins(q.pkg))return false;
+  if(dpm==null)return false;
+  java.util.List<ComponentName> admins=dpm.getActiveAdmins();
+  if(admins!=null)for(ComponentName admin:admins)if(q.pkg.equals(admin.getPackageName()))return false;
   String action=app.getPackageName()+".DELETE_FX."+UUID.randomUUID().toString();
   Intent result=new Intent(action).setPackage(app.getPackageName());
   int flags=PendingIntent.FLAG_UPDATE_CURRENT|(Build.VERSION.SDK_INT>=31?PendingIntent.FLAG_MUTABLE:0);
