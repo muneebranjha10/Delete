@@ -24,15 +24,16 @@ final class ParticleEffect extends Drawable {
   int[] pixels=new int[GRID*GRID];image.getPixels(pixels,0,GRID,0,0,GRID,GRID);
   for(int gy=0;gy<GRID;gy++)for(int gx=0;gx<GRID;gx++){
    int color=pixels[gy*GRID+gx];if(Color.alpha(color)<55)continue;
+   if(rand.nextFloat()>.36f)continue;
    int i=count++;
    float px=(gx+.15f+rand.nextFloat()*.7f)/GRID,py=(gy+.15f+rand.nextFloat()*.7f)/GRID;
    x[i]=(px-.5f)*box.width();y[i]=(py-.5f)*box.height();
    float a=(float)Math.atan2(y[i],x[i])+(rand.nextFloat()-.5f)*2.9f;
-   float speed=size*(.18f+1.20f*(float)Math.pow(rand.nextFloat(),1.15));
+   float speed=size*(.24f+1.65f*(float)Math.pow(rand.nextFloat(),1.05));
    vx[i]=(float)Math.cos(a)*speed;vy[i]=(float)Math.sin(a)*speed;
-   radius[i]=Math.max(.38f,size*(.004f+.006f*(float)Math.pow(rand.nextFloat(),2)));
+   radius[i]=Math.max(.38f,size*(.006f+.008f*(float)Math.pow(rand.nextFloat(),2)));
    delay[i]=rand.nextFloat()*.045f;phase[i]=rand.nextFloat()*6.283f;
-   life[i]=.72f+.28f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.27f;
+   life[i]=.72f+.28f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.40f;
   }
  }
  static Bitmap sample(Drawable icon){
@@ -74,9 +75,9 @@ final class ParticleEffect extends Drawable {
    int col=colors[i];
    if(spark[i])col=Color.rgb((Color.red(col)*3+255)/4,(Color.green(col)*3+255)/4,(Color.blue(col)*3+255)/4);
    paint.setColor(col);paint.setAlpha(alpha);
-   if((i&7)==0)c.drawRect(xx-r,yy-r,xx+r,yy+r,paint);else c.drawCircle(xx,yy,r,paint);
+   if((i&15)==0)c.drawRect(xx-r,yy-r,xx+r,yy+r,paint);else c.drawCircle(xx,yy,r,paint);
    if(spark[i]&&p>.015f){
-    float twinkle=.30f+.70f*(float)Math.abs(Math.sin(phase[i]+p*22));
+    float twinkle=.55f+.45f*(float)Math.abs(Math.sin(phase[i]+p*22));
     paint.setColor(Color.WHITE);paint.setAlpha((int)(alpha*twinkle*.98f));c.drawCircle(xx,yy,Math.max(.33f,r*.65f),paint);
    }
   }

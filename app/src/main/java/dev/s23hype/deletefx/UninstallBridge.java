@@ -40,6 +40,8 @@ final class UninstallBridge {
 
  private final ThreadLocal<Boolean> explicitClick=new ThreadLocal<>();
  private boolean directBusy;
+ private ComponentName selected;
+ private UserHandle selectedUser;
  private final ThreadLocal<View> popup=new ThreadLocal<>();
  private UninstallBridge(ClassLoader cl)throws Exception{
   iconClass=Class.forName("com.honeyspace.ui.common.iconview.IconContainer",false,cl);
@@ -52,8 +54,8 @@ final class UninstallBridge {
   });log("early icon capture installed");}catch(Throwable t){log("early icon capture unavailable: "+t);}
   Class<?> option=Class.forName(QUICK+"Uninstall",false,cl);
   XposedHelpers.findAndHookMethod(option,"onClick",View.class,new XC_MethodHook(){
-   protected void beforeHookedMethod(MethodHookParam p){b.explicitClick.set(true);log("Uninstall.onClick");try{b.capture(p.thisObject);}catch(Throwable t){log("capture unavailable: "+t);}}
-   protected void afterHookedMethod(MethodHookParam p){b.explicitClick.remove();}
+   protected void beforeHookedMethod(MethodHookParam p){b.explicitClick.set(true);b.selected=null;b.selectedUser=null;log("Uninstall.onClick");try{b.capture(p.thisObject);}catch(Throwable t){log("capture unavailable: "+t);}}
+   protected void afterHookedMethod(MethodHookParam p){b.explicitClick.remove();b.selected=null;b.selectedUser=null;}
   });
   // Only replace Samsung's final intent launch after its existing eligibility checks.
   // Never grant privileges, use root, or bypass a required OS policy decision.
@@ -69,9 +71,8 @@ final class UninstallBridge {
    XposedHelpers.findAndHookMethod(pkgUtils,"uninstallPackage",Context.class,String.class,new XC_MethodHook(){
     protected void beforeHookedMethod(MethodHookParam p){
      if(!Boolean.TRUE.equals(b.explicitClick.get()))return;
-     Pending q=b.pending;
-     if(q==null||!q.pkg.equals(p.args[1]))return;
-     try{if(b.direct((Context)p.args[0],q.component,q.user,true))p.setResult(true);}catch(Throwable t){log("direct uninstall fallback: "+t);}
+     if(b.selected==null||!b.selected.getPackageName().equals(p.args[1]))return;
+     try{if(b.direct((Context)p.args[0],b.selected,b.selectedUser,true))p.setResult(true);}catch(Throwable t){log("direct uninstall fallback: "+t);}
     }
    });
   }catch(Throwable t){log("direct path unavailable: "+t);}
@@ -98,14 +99,15 @@ final class UninstallBridge {
   try{return q.anchor.get()==view;}catch(Throwable ignored){return false;}
  }
  private void capture(Object option){
-  if(Looper.myLooper()!=Looper.getMainLooper()||!ValueAnimator.areAnimatorsEnabled()||directBusy)return;
+  if(Looper.myLooper()!=Looper.getMainLooper()||directBusy)return;
   clear(pending);
   Object info=XposedHelpers.callMethod(option,"getItemInfo");
   Object utils=XposedHelpers.getStaticObjectField(utilsClass,"INSTANCE");
-  Object component=XposedHelpers.callMethod(utils,"getComponentName",info,false);
-  Object user=XposedHelpers.callMethod(utils,"getUserHandle",info,false);
+  Object component=XposedHelpers.callStaticMethod(utilsClass,"getComponentName$default",utils,info,false,2,null);
+  Object user=XposedHelpers.callStaticMethod(utilsClass,"getUserHandle$default",utils,info,false,2,null);
   if(!(component instanceof ComponentName)||!(user instanceof UserHandle))return;
   if(!android.os.Process.myUserHandle().equals(user))return;
+  selected=(ComponentName)component;selectedUser=(UserHandle)user;
   Object item=XposedHelpers.callMethod(info,"getItemInfo");if(item==null)return;
   int id=(Integer)XposedHelpers.callMethod(item,"getId");
   if(id<0)return;
@@ -145,20 +147,22 @@ final class UninstallBridge {
  }
  private boolean direct(Context context,ComponentName component,UserHandle user,boolean pregrantPath)throws Exception{
   Pending q=pending;
-  if(q==null||directBusy||context==null||component==null||user==null||!q.component.equals(component)||!q.user.equals(user)||!android.os.Process.myUserHandle().equals(user))return false;
+  if(directBusy||context==null||component==null||user==null||!component.equals(selected)||!user.equals(selectedUser)||!android.os.Process.myUserHandle().equals(user))return false;
+  if(q!=null&&(!q.component.equals(component)||!q.user.equals(user)))return false;
+  final String target=component.getPackageName();
   XSharedPreferences pref=new XSharedPreferences("dev.s23hype.deletefx","deletefx");
   pref.reload();if(!pref.getBoolean("one_tap",false)){log("one-tap disabled or preferences unreadable");return false;}
   Context app=context.getApplicationContext();if(app==null)return false;
   if(app.checkSelfPermission("android.permission.DELETE_PACKAGES")!=PackageManager.PERMISSION_GRANTED){log("DELETE_PACKAGES not granted; stock confirmation");return false;}
-  PackageManager pm=app.getPackageManager();ApplicationInfo ai=pm.getApplicationInfo(q.pkg,0);
-  if((ai.flags&(ApplicationInfo.FLAG_SYSTEM|ApplicationInfo.FLAG_UPDATED_SYSTEM_APP))!=0||q.pkg.equals(app.getPackageName())||q.pkg.equals("dev.s23hype.deletefx"))return false;
+  PackageManager pm=app.getPackageManager();ApplicationInfo ai=pm.getApplicationInfo(target,0);
+  if((ai.flags&(ApplicationInfo.FLAG_SYSTEM|ApplicationInfo.FLAG_UPDATED_SYSTEM_APP))!=0||target.equals(app.getPackageName())||target.equals("dev.s23hype.deletefx"))return false;
   // Preserve managed-profile and administrator restrictions. PackageInstaller also enforces them.
   UserManager um=app.getSystemService(UserManager.class);
   if(um==null||um.isManagedProfile()||um.hasUserRestriction(UserManager.DISALLOW_UNINSTALL_APPS))return false;
   android.app.admin.DevicePolicyManager dpm=app.getSystemService(android.app.admin.DevicePolicyManager.class);
   if(dpm==null)return false;
   java.util.List<ComponentName> admins=dpm.getActiveAdmins();
-  if(admins!=null)for(ComponentName admin:admins)if(q.pkg.equals(admin.getPackageName()))return false;
+  if(admins!=null)for(ComponentName admin:admins)if(target.equals(admin.getPackageName()))return false;
   String action=app.getPackageName()+".DELETE_FX."+UUID.randomUUID().toString();
   Intent result=new Intent(action).setPackage(app.getPackageName());
   int flags=PendingIntent.FLAG_UPDATE_CURRENT|(Build.VERSION.SDK_INT>=31?PendingIntent.FLAG_MUTABLE:0);
@@ -170,6 +174,8 @@ final class UninstallBridge {
     if(!action.equals(i.getAction()))return;
     int status=i.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE);
     if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
+     if(q!=null){q.osConfirmation=true;restoreVisual(q);}
+
      // Respect the OS if it requires confirmation. Never auto-approve.
      Intent confirm=i.getParcelableExtra(Intent.EXTRA_INTENT);
      if(confirm!=null){try{confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);app.startActivity(confirm);}catch(RuntimeException e){log("OS confirmation unavailable: "+e);clear(q);}}
@@ -178,8 +184,8 @@ final class UninstallBridge {
     }
     main.removeCallbacks(finish);finish.run();
     if(status==PackageInstaller.STATUS_SUCCESS){
-     if(pending==q&&!q.confirmed){q.confirmed=true;q.removedAt=SystemClock.uptimeMillis();tryPlay(q);}
-     log("direct uninstall succeeded: "+q.pkg);
+     if(q!=null&&pending==q&&!q.confirmed){q.confirmed=true;q.removedAt=SystemClock.uptimeMillis();tryPlay(q);}
+     log("direct uninstall succeeded: "+target);
     }else{clear(q);Toast.makeText(app,"Uninstall was not completed",Toast.LENGTH_SHORT).show();log("uninstall status "+status);}
    }
   };
@@ -187,8 +193,9 @@ final class UninstallBridge {
    if(Build.VERSION.SDK_INT>=33)app.registerReceiver(holder[0],new IntentFilter(action),Context.RECEIVER_NOT_EXPORTED);
    else app.registerReceiver(holder[0],new IntentFilter(action));
    directBusy=true;main.postDelayed(finish,120000);
-   pm.getPackageInstaller().uninstall(q.pkg,pi.getIntentSender());
-   log("one-tap request submitted: "+q.pkg);return true;
+   pm.getPackageInstaller().uninstall(target,pi.getIntentSender());
+   if(q!=null){q.submittedAt=SystemClock.uptimeMillis();main.post(()->startImmediate(q));}
+   log("one-tap request submitted: "+target);return true;
   }catch(RuntimeException e){main.removeCallbacks(finish);finish.run();log("direct request rejected: "+e);return false;}
  }
  private View find(View v,int id,int depth,int[] budget){
@@ -204,7 +211,8 @@ final class UninstallBridge {
  private final class Pending{
   final WeakReference<View> root,anchor;final RectF box;final Bitmap bitmap;
   final String pkg;final ComponentName component;final UserHandle user;final LauncherApps la;
-  final int width,height;boolean registered,confirmed;long removedAt;Context receiverContext;
+  final int width,height;boolean registered,confirmed,played,osConfirmation;long removedAt,submittedAt;Context receiverContext;
+  WeakReference<View> hidden;float originalAlpha;int hiddenId=-1;
   final BroadcastReceiver removalReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){if(!Intent.ACTION_PACKAGE_REMOVED.equals(i.getAction())||i.getBooleanExtra(Intent.EXTRA_REPLACING,false)||i.getData()==null||!pkg.equals(i.getData().getSchemeSpecificPart())||pending!=Pending.this||confirmed)return;try{c.getPackageManager().getApplicationInfo(pkg,0);return;}catch(PackageManager.NameNotFoundException expected){} confirmed=true;removedAt=SystemClock.uptimeMillis();log("confirmed package removal broadcast: "+pkg);tryPlay(Pending.this);}};
   final Runnable expire=()->clear(this);
   final LauncherApps.Callback callback=new LauncherApps.Callback(){
@@ -221,24 +229,58 @@ final class UninstallBridge {
    root=new WeakReference<>(r);anchor=new WeakReference<>(a);this.box=box;bitmap=bmp;component=p;pkg=p.getPackageName();user=u;la=l;width=r.getWidth();height=r.getHeight();
   }
  }
+ private void startImmediate(Pending q){
+  if(pending!=q||q.played||q.osConfirmation||q.confirmed||!ValueAnimator.areAnimatorsEnabled())return;
+  try{
+   View r=q.root.get();
+   if(r==null||!r.isAttachedToWindow()||r.getWidth()!=q.width||r.getHeight()!=q.height)return;
+   if(!r.hasWindowFocus()||!r.isShown()){
+    if(SystemClock.uptimeMillis()-q.submittedAt<200)main.postDelayed(()->startImmediate(q),16);
+    return;
+   }
+   playNow(q,r,false);
+  }catch(Throwable t){restoreVisual(q);log("immediate visual fallback: "+t);}
+ }
+ private void playNow(Pending q,View r,boolean confirmed){
+  if(q.played)return;
+  View a=q.anchor.get();
+  if(a!=null&&a.isAttachedToWindow()&&a.getRootView()==r&&a.isShown()){
+   try{
+    int id=(Integer)XposedHelpers.callMethod(a,"getItemId");
+    Object child=XposedHelpers.callMethod(a,"getIconView");
+    Object v=XposedHelpers.callMethod(child,"getView");
+    if(v instanceof View&&((View)v).isAttachedToWindow()){
+     View h=(View)v;q.hidden=new WeakReference<>(h);q.hiddenId=id;q.originalAlpha=h.getAlpha();h.setAlpha(0f);
+    }
+   }catch(Throwable ignored){}
+  }
+  if(ParticleEffect.play(r,q.bitmap,q.box,confirmed)){
+   q.played=true;log(confirmed?"confirmed uninstall particles played":"immediate uninstall transition started");
+   main.postDelayed(()->restoreVisual(q),ParticleMath.DURATION_MS+40);
+  }else restoreVisual(q);
+ }
+ private void restoreVisual(Pending q){
+  if(q==null||q.hidden==null)return;
+  View h=q.hidden.get();q.hidden=null;
+  if(h!=null&&h.getAlpha()==0f)h.setAlpha(q.originalAlpha);
+ }
  private void tryPlay(Pending q){
   if(pending!=q)return;
   try{
-   View r=q.root.get(),a=q.anchor.get();long elapsed=SystemClock.uptimeMillis()-q.removedAt;
+   if(q.played){clear(q);return;}
+   View r=q.root.get();long elapsed=SystemClock.uptimeMillis()-q.removedAt;
    if(r==null||!r.isAttachedToWindow()||r.getWidth()!=q.width||r.getHeight()!=q.height||elapsed>4000){log("root unavailable/timeout");clear(q);return;}
-   if(!r.hasWindowFocus()||!r.isShown()||(elapsed<100&&a!=null&&a.isAttachedToWindow()&&a.isShown())){main.postDelayed(()->tryPlay(q),16);return;}
-   // Do not animate on an icon that is still present: preserve stock behavior.
-   if(a!=null&&a.isAttachedToWindow()&&a.isShown()&&a.getAlpha()>.05f&&elapsed<650){main.postDelayed(()->tryPlay(q),16);return;}
-   if(ParticleEffect.play(r,q.bitmap,q.box,true))log("uninstall particles played");
-   clear(q);
+   if(!r.hasWindowFocus()||!r.isShown()){main.postDelayed(()->tryPlay(q),16);return;}
+   playNow(q,r,true);clear(q);
   }catch(Throwable t){clear(q);log("uninstall effect fallback: "+t);}
  }
  private void clear(Pending q){
   if(q==null)return;if(pending==q)pending=null;
+  if(!q.confirmed)restoreVisual(q);
   main.removeCallbacks(q.expire);
   if(q.registered){q.registered=false;try{q.la.unregisterCallback(q.callback);}catch(Throwable ignored){}}
   if(q.receiverContext!=null){try{q.receiverContext.unregisterReceiver(q.removalReceiver);}catch(RuntimeException ignored){}q.receiverContext=null;}
   if(!q.bitmap.isRecycled())q.bitmap.recycle();
  }
- private static void log(String msg){XposedBridge.log("AppDeleteFX 0.5: "+msg);}
+ private static void log(String msg){XposedBridge.log("AppDeleteFX 0.6: "+msg);}
 }
