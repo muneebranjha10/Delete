@@ -14,3 +14,6 @@ Get the APK from Actions > successful build > Artifacts. Install, enable in LSPo
 
 ## 0.3 alpha
 New uninstall path captures the exact selected icon before the confirmation dialog and listens for successful removal via LauncherApps.Callback for the current user. Renders once the launcher is visible/focused and the original icon is gone. Launcher-owned uninstall popup dim is disabled only for its own WindowManager call; normal package installer activity may still dim. No change to confirmation or package operations. Brighter and denser particle glints, shorter breakup. Firmware behavior and exact match remain unverified.
+
+## 0.4 alpha
+Opt-in one-tap uninstall via existing launcher DELETE_PACKAGES permission and PackageInstaller, scoped to the explicit stock Uninstall click and its final PackageUtils intent launch. No extra root grant. Only downloaded apps in current non-managed user; stock confirmation remains when permission, preferences or icon capture are missing, or Android requires confirmation. Enable the toggle in the module app after LSPosed activation. Local app data may be deleted. Corrected IconViewChild.getView() based on supplied APK (IconViewChild is an interface, not a View); reduced particle travel and white tint to better preserve the purple reference. Runtime and visual match unverified.

@@ -3,7 +3,8 @@
 <application android:label="App Delete FX" android:icon="@drawable/ic_module" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false">
 <meta-data android:name="xposedmodule" android:value="true"/>
 <meta-data android:name="xposeddescription" android:value="Reference-tuned icon disintegration for One UI Home"/>
-<meta-data android:name="xposedminversion" android:value="82"/>
+<meta-data android:name="xposedminversion" android:value="93"/>
+<meta-data android:name="xposedsharedprefs" android:value="true"/>
 <meta-data android:name="xposedscope" android:value="com.sec.android.app.launcher"/>
 <activity android:name=".PreviewActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
 </application></manifest>

@@ -28,11 +28,11 @@ final class ParticleEffect extends Drawable {
    float px=(gx+.15f+rand.nextFloat()*.7f)/GRID,py=(gy+.15f+rand.nextFloat()*.7f)/GRID;
    x[i]=(px-.5f)*box.width();y[i]=(py-.5f)*box.height();
    float a=(float)Math.atan2(y[i],x[i])+(rand.nextFloat()-.5f)*2.9f;
-   float speed=size*(.30f+1.85f*(float)Math.pow(rand.nextFloat(),.85));
+   float speed=size*(.18f+1.20f*(float)Math.pow(rand.nextFloat(),1.15));
    vx[i]=(float)Math.cos(a)*speed;vy[i]=(float)Math.sin(a)*speed;
    radius[i]=Math.max(.38f,size*(.004f+.006f*(float)Math.pow(rand.nextFloat(),2)));
    delay[i]=rand.nextFloat()*.045f;phase[i]=rand.nextFloat()*6.283f;
-   life[i]=.72f+.28f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.64f;
+   life[i]=.72f+.28f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.27f;
   }
  }
  static Bitmap sample(Drawable icon){
@@ -59,7 +59,7 @@ final class ParticleEffect extends Drawable {
   try{anim.start();return true;}catch(RuntimeException e){root.getOverlay().remove(fx);root.removeOnAttachStateChangeListener(attach);throw e;}
  }
  @Override public void draw(Canvas c){
-  float breakup=burstOnly?ParticleMath.clamp(time/.065f):ParticleMath.breakup(time),collapse=burstOnly?.88f:ParticleMath.collapse(time);
+  float breakup=burstOnly?ParticleMath.clamp(time/.035f):ParticleMath.breakup(time),collapse=burstOnly?.88f:ParticleMath.collapse(time);
   if(!burstOnly&&breakup<1){
    paint.setColor(Color.WHITE);paint.setAlpha(Math.round(255*(1-breakup)));
    c.save();c.scale(collapse,collapse,cx,cy);c.drawBitmap(image,null,box,paint);c.restore();
@@ -72,7 +72,7 @@ final class ParticleEffect extends Drawable {
    float r=radius[i]*ParticleMath.radius(age);
    int alpha=Math.round(Color.alpha(colors[i])*ParticleMath.fade(age)*breakup);
    int col=colors[i];
-   if(spark[i])col=Color.rgb((Color.red(col)+255)/2,(Color.green(col)+255)/2,(Color.blue(col)+255)/2);
+   if(spark[i])col=Color.rgb((Color.red(col)*3+255)/4,(Color.green(col)*3+255)/4,(Color.blue(col)*3+255)/4);
    paint.setColor(col);paint.setAlpha(alpha);
    if((i&7)==0)c.drawRect(xx-r,yy-r,xx+r,yy+r,paint);else c.drawCircle(xx,yy,r,paint);
    if(spark[i]&&p>.015f){
