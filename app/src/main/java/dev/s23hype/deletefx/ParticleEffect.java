@@ -16,6 +16,7 @@ final class ParticleEffect extends Drawable {
  private final float[] x=new float[MAX],y=new float[MAX],vx=new float[MAX],vy=new float[MAX],radius=new float[MAX],delay=new float[MAX],phase=new float[MAX],life=new float[MAX];
  private final int[] colors=new int[MAX];
  private final boolean[] spark=new boolean[MAX];
+ private final int[] highlights=new int[MAX];
  private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
  private final RectF box;
  private final Bitmap image;
@@ -34,12 +35,13 @@ final class ParticleEffect extends Drawable {
    int i=count++;
    float px=(gx+.15f+rand.nextFloat()*.7f)/GRID,py=(gy+.15f+rand.nextFloat()*.7f)/GRID;
    x[i]=(px-.5f)*box.width();y[i]=(py-.5f)*box.height();
-   float a=(float)Math.atan2(y[i],x[i])+(rand.nextFloat()-.5f)*2.9f;
-   float speed=size*(.18f+1.35f*(float)Math.pow(rand.nextFloat(),1.15));
+   float a=(float)Math.atan2(y[i],x[i])+(rand.nextFloat()-.5f)*1.85f;
+   float speed=size*(.18f+1.58f*(float)Math.pow(rand.nextFloat(),1.35));
    vx[i]=(float)Math.cos(a)*speed;vy[i]=(float)Math.sin(a)*speed;
-   radius[i]=Math.max(.38f,size*(.006f+.008f*(float)Math.pow(rand.nextFloat(),2)));
-   delay[i]=rand.nextFloat()*.045f;phase[i]=rand.nextFloat()*6.283f;
-   life[i]=.89f+.11f*rand.nextFloat();colors[i]=color;spark[i]=rand.nextFloat()<.48f;
+   radius[i]=Math.max(.42f,size*(.0045f+.010f*(float)Math.pow(rand.nextFloat(),2)));
+   float edge=Math.min(1f,(float)Math.hypot(x[i],y[i])/(size*.71f));
+   delay[i]=.065f+(1-edge)*.035f+rand.nextFloat()*.03f;phase[i]=rand.nextFloat()*6.283f;
+   life[i]=.85f+.15f*rand.nextFloat();colors[i]=color;highlights[i]=ParticleMath.highlight(color);spark[i]=rand.nextFloat()<.30f;
   }
  }
  static Bitmap sample(Drawable icon){
@@ -75,25 +77,27 @@ final class ParticleEffect extends Drawable {
   catch(RuntimeException e){recent.remove(root);playback.finish();throw e;}
  }
  @Override public void draw(Canvas c){
-  float breakup=burstOnly?ParticleMath.clamp(time/.035f):ParticleMath.breakup(time),collapse=burstOnly?.88f:ParticleMath.collapse(time);
+  float breakup=ParticleMath.breakup(time),collapse=ParticleMath.collapse(time);
   if(!burstOnly&&breakup<1){
    paint.setColor(Color.WHITE);paint.setAlpha(Math.round(255*(1-breakup)));
    c.save();c.scale(collapse,collapse,cx,cy);c.drawBitmap(image,null,box,paint);c.restore();
   }
   for(int i=0;i<count;i++){
+   if(time<delay[i])continue;
    float p=ParticleMath.progress(time,delay[i]);float age=ParticleMath.clamp(p/life[i]);if(age>=1)continue;
    float travel=ParticleMath.spread(p);
-   float xx=cx+x[i]*collapse+vx[i]*travel+(float)Math.sin(phase[i]+p*4)*size*.022f*p;
-   float yy=cy+y[i]*collapse+vy[i]*travel+size*.028f*p*p;
+   float xx=cx+x[i]*.96f+vx[i]*travel+(float)Math.sin(phase[i]+p*4)*size*.025f*p;
+   float yy=cy+y[i]*.96f+vy[i]*travel+size*.035f*p*p;
    float r=radius[i]*ParticleMath.radius(age);
    int alpha=Math.round(Color.alpha(colors[i])*ParticleMath.fade(age)*breakup);
-   int col=colors[i];
-   if(spark[i])col=Color.rgb((Color.red(col)*3+255)/4,(Color.green(col)*3+255)/4,(Color.blue(col)*3+255)/4);
-   paint.setColor(col);paint.setAlpha(alpha);
-   if((i&15)==0)c.drawRect(xx-r,yy-r,xx+r,yy+r,paint);else c.drawCircle(xx,yy,r,paint);
-   if(spark[i]&&p>.015f){
-    float twinkle=.55f+.45f*(float)Math.abs(Math.sin(phase[i]+p*22));
-    paint.setColor(Color.WHITE);paint.setAlpha((int)(alpha*twinkle*.98f));c.drawCircle(xx,yy,Math.max(.33f,r*.65f),paint);
+   // Every mote keeps its source pixel hue, including dark and white icon regions.
+   // Small round highlights mimic a popping bubble without a white flash.
+   paint.setColor(colors[i]);paint.setAlpha(alpha);
+   c.drawCircle(xx,yy,r,paint);
+   if(spark[i]&&r>.65f){
+    float twinkle=.55f+.45f*(float)Math.abs(Math.sin(phase[i]+p*16));
+    paint.setColor(highlights[i]);paint.setAlpha(Math.round(alpha*twinkle*.8f));
+    c.drawCircle(xx-r*.24f,yy-r*.28f,Math.max(.28f,r*.45f),paint);
    }
   }
  }

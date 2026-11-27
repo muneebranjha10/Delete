@@ -300,5 +300,5 @@ final class UninstallBridge {
   if(q.receiverContext!=null){try{q.receiverContext.unregisterReceiver(q.removalReceiver);}catch(RuntimeException ignored){}q.receiverContext=null;}
   if(!q.bitmap.isRecycled())q.bitmap.recycle();
  }
- private static void log(String msg){XposedBridge.log("AppDeleteFX 0.7: "+msg);}
+ private static void log(String msg){XposedBridge.log("AppDeleteFX 0.8: "+msg);}
 }

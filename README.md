@@ -26,3 +26,6 @@ Reference clip at ~23.7 fps: popup closes, icon fades for one frame, dense small
 
 ## 0.7 alpha
 User recording shows a particle burst and original icon reappearance around 12–13 s. Increase effect to 850 ms using elapsed Choreographer frame time (honors animation-disabled setting, independent of nonzero animator duration scale). Hold brightness longer, slow expansion, increase particle density. Deduplicate bursts at the same icon location and suppress a second launcher removal effect briefly. Bound icon hiding and restore on failure. Does not remove OS confirmation; latest recording still shows it. Actual device behavior unverified.
+
+## 0.8 alpha
+Icon-colored bubble-pop: round particles sampled from the actual icon bitmap, no separate pure-white sparkle pass; small hue-preserving highlights, slight icon expansion and edge-first breakup, then outward drift. Keep 850 ms real-time playback based on user feedback, which is slower than the reference clip. Confirmed-removal path emits particles without redrawing an already-deleted icon. No changes to uninstall permission or confirmation flow. Added math tests for color order and scale. Device verification required.
