@@ -28,6 +28,6 @@ public final class PreviewActivity extends Activity {
    fast.setOnCheckedChangeListener((button,on)->{if(on){new android.app.AlertDialog.Builder(this).setTitle("Enable one-tap uninstall?").setMessage("Uninstall will remove the selected app and its local data without a second confirmation when Android permits.").setPositiveButton("Enable",(d,w)->prefs.edit().putBoolean("one_tap",true).commit()).setNegativeButton("Cancel",(d,w)->fast.setChecked(false)).setOnCancelListener(d->fast.setChecked(false)).show();}else prefs.edit().putBoolean("one_tap",false).commit();});
   }catch(SecurityException e){fast.setEnabled(false);notice.setText("One-tap requires LSPosed shared preferences. Enable the module, restart the device, then reopen this app.");}
   page.addView(fast);page.addView(notice);
-  TextView guide=new TextView(this);guide.setText("LSPosed → One UI Home only → restart launcher.\nExperimental 0.4 alpha");guide.setTextColor(0xffc1c0ce);guide.setPadding(0,dp(20),0,0);page.addView(guide);setContentView(page);
+  TextView guide=new TextView(this);guide.setText("LSPosed → One UI Home only → restart launcher.\nExperimental 0.5 alpha");guide.setTextColor(0xffc1c0ce);guide.setPadding(0,dp(20),0,0);page.addView(guide);setContentView(page);
  }
 }

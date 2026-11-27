@@ -19,6 +19,25 @@ final class UninstallBridge {
  private final Class<?> iconClass,utilsClass;
  private final Handler main=new Handler(Looper.getMainLooper());
  private Pending pending;
+ private TouchSnapshot touch;
+ private final class TouchSnapshot {
+  final WeakReference<View> root,anchor;final int id;final RectF box;final Bitmap bitmap;final long at;
+  TouchSnapshot(View r,View a,int i,RectF b,Bitmap m){root=new WeakReference<>(r);anchor=new WeakReference<>(a);id=i;box=b;bitmap=m;at=SystemClock.uptimeMillis();}
+ }
+ private void forgetTouch(){if(touch!=null){touch.bitmap.recycle();touch=null;}}
+ private void remember(View v){
+  if(!v.isAttachedToWindow()||!v.isShown())return;
+  int id=(Integer)XposedHelpers.callMethod(v,"getItemId");if(id<0)return;
+  Object child=XposedHelpers.callMethod(v,"getIconView");Object d=XposedHelpers.callMethod(v,"getIcon");Object r=XposedHelpers.callMethod(v,"getIconPosition");
+  if(!(d instanceof Drawable)||!(r instanceof Rect))return;
+  View a=v;try{Object av=XposedHelpers.callMethod(child,"getView");if(av instanceof View)a=(View)av;}catch(Throwable ignored){}
+  View root=v.getRootView();RectF box=new RectF((Rect)r);if(box.isEmpty())return;
+  int[] xy=new int[2],origin=new int[2];a.getLocationOnScreen(xy);root.getLocationOnScreen(origin);box.offset(xy[0]-origin[0],xy[1]-origin[1]);
+  if(!RectF.intersects(box,new RectF(0,0,root.getWidth(),root.getHeight())))return;
+  forgetTouch();TouchSnapshot snap=new TouchSnapshot(root,v,id,box,ParticleEffect.sample((Drawable)d));touch=snap;
+  main.postDelayed(()->{if(touch==snap)forgetTouch();},45000);
+ }
+
  private final ThreadLocal<Boolean> explicitClick=new ThreadLocal<>();
  private boolean directBusy;
  private final ThreadLocal<View> popup=new ThreadLocal<>();
@@ -28,9 +47,12 @@ final class UninstallBridge {
  }
  static UninstallBridge install(ClassLoader cl)throws Exception{
   UninstallBridge b=new UninstallBridge(cl);
+  try{XposedHelpers.findAndHookMethod(b.iconClass,"onTouchEvent",MotionEvent.class,new XC_MethodHook(){
+   protected void beforeHookedMethod(MethodHookParam p){if(((MotionEvent)p.args[0]).getActionMasked()==MotionEvent.ACTION_DOWN){try{b.remember((View)p.thisObject);}catch(Throwable t){log("touch capture: "+t);}}}
+  });log("early icon capture installed");}catch(Throwable t){log("early icon capture unavailable: "+t);}
   Class<?> option=Class.forName(QUICK+"Uninstall",false,cl);
   XposedHelpers.findAndHookMethod(option,"onClick",View.class,new XC_MethodHook(){
-   protected void beforeHookedMethod(MethodHookParam p){b.explicitClick.set(true);try{b.capture(p.thisObject);}catch(Throwable t){log("capture unavailable: "+t);}}
+   protected void beforeHookedMethod(MethodHookParam p){b.explicitClick.set(true);log("Uninstall.onClick");try{b.capture(p.thisObject);}catch(Throwable t){log("capture unavailable: "+t);}}
    protected void afterHookedMethod(MethodHookParam p){b.explicitClick.remove();}
   });
   // Only replace Samsung's final intent launch after its existing eligibility checks.
@@ -87,27 +109,38 @@ final class UninstallBridge {
   Object item=XposedHelpers.callMethod(info,"getItemInfo");if(item==null)return;
   int id=(Integer)XposedHelpers.callMethod(item,"getId");
   if(id<0)return;
-  Object pot=XposedHelpers.callMethod(option,"getHoneyPot");
-  Object rootObj=XposedHelpers.callMethod(pot,"getRootView");
-  if(!(rootObj instanceof View))return;
-  View root=((View)rootObj).getRootView();
-  View icon=find(root,id,0,new int[]{3500});if(icon==null){log("selected icon not found: "+id);return;}
-  Object drawable=XposedHelpers.callMethod(icon,"getIcon");
-  Object rect=XposedHelpers.callMethod(icon,"getIconPosition");
-  if(!(drawable instanceof Drawable)||!(rect instanceof Rect))return;
-  Object child=XposedHelpers.callMethod(icon,"getIconView");
-  View anchor=icon;
-  try{Object v=XposedHelpers.callMethod(child,"getView");if(v instanceof View&&((View)v).isAttachedToWindow())anchor=(View)v;}catch(Throwable ignored){}
-  RectF box=new RectF((Rect)rect);
-  if(box.width()<=0||box.height()<=0||box.width()>anchor.getWidth()+2||box.height()>anchor.getHeight()+2)return;
-  int[] at=new int[2],origin=new int[2];anchor.getLocationOnScreen(at);root.getLocationOnScreen(origin);
-  box.offset(at[0]-origin[0],at[1]-origin[1]);
-  if(!RectF.intersects(box,new RectF(0,0,root.getWidth(),root.getHeight())))return;
-  Context app=root.getContext().getApplicationContext();if(app==null)return;
-  LauncherApps la=app.getSystemService(LauncherApps.class);if(la==null)return;
-  Pending q=new Pending(root,icon,box,ParticleEffect.sample((Drawable)drawable),(ComponentName)component,(UserHandle)user,la);
+  View root=null,icon=null;RectF box=null;Bitmap bitmap=null;
+  TouchSnapshot snap=touch;
+  if(snap!=null&&snap.id==id&&SystemClock.uptimeMillis()-snap.at<45000){
+   root=snap.root.get();icon=snap.anchor.get();
+   if(root!=null&&root.isAttachedToWindow()&&icon!=null){
+    box=new RectF(snap.box);bitmap=snap.bitmap.copy(Bitmap.Config.ARGB_8888,false);log("using early touch snapshot: "+id);
+   }
+  }
+  if(bitmap==null){
+   Object pot=XposedHelpers.callMethod(option,"getHoneyPot");
+   Object rootObj=XposedHelpers.callMethod(pot,"getRootView");
+   if(!(rootObj instanceof View)){log("no launcher root");return;}
+   root=((View)rootObj).getRootView();
+   icon=find(root,id,0,new int[]{5000});if(icon==null){log("selected icon not found: "+id);return;}
+   Object drawable=XposedHelpers.callMethod(icon,"getIcon"),rect=XposedHelpers.callMethod(icon,"getIconPosition");
+   if(!(drawable instanceof Drawable)||!(rect instanceof Rect)){log("no drawable or bounds");return;}
+   Object child=XposedHelpers.callMethod(icon,"getIconView");View anchor=icon;
+   try{Object v=XposedHelpers.callMethod(child,"getView");if(v instanceof View&&((View)v).isAttachedToWindow())anchor=(View)v;}catch(Throwable ignored){}
+   box=new RectF((Rect)rect);if(box.isEmpty()){log("empty icon bounds");return;}
+   int[] at=new int[2],origin=new int[2];anchor.getLocationOnScreen(at);root.getLocationOnScreen(origin);
+   box.offset(at[0]-origin[0],at[1]-origin[1]);
+   if(!RectF.intersects(box,new RectF(0,0,root.getWidth(),root.getHeight()))){log("icon outside root");return;}
+   bitmap=ParticleEffect.sample((Drawable)drawable);
+  }
+  Context app=root.getContext().getApplicationContext();if(app==null){bitmap.recycle();return;}
+  LauncherApps la=app.getSystemService(LauncherApps.class);if(la==null){bitmap.recycle();return;}
+  Pending q=new Pending(root,icon,box,bitmap,(ComponentName)component,(UserHandle)user,la);
   pending=q;
-  try{la.registerCallback(q.callback,main);q.registered=true;main.postDelayed(q.expire,60000);log("armed for "+q.pkg);}
+  try{la.registerCallback(q.callback,main);q.registered=true;
+   IntentFilter removed=new IntentFilter(Intent.ACTION_PACKAGE_REMOVED);removed.addDataScheme("package");
+   try{if(Build.VERSION.SDK_INT>=33)app.registerReceiver(q.removalReceiver,removed,Context.RECEIVER_EXPORTED);else app.registerReceiver(q.removalReceiver,removed);q.receiverContext=app;}catch(RuntimeException e){log("broadcast backup unavailable: "+e);}
+   main.postDelayed(q.expire,60000);log("armed for "+q.pkg);}
   catch(Throwable t){clear(q);log("package callback failed: "+t);}
  }
  private boolean direct(Context context,ComponentName component,UserHandle user,boolean pregrantPath)throws Exception{
@@ -159,8 +192,8 @@ final class UninstallBridge {
   }catch(RuntimeException e){main.removeCallbacks(finish);finish.run();log("direct request rejected: "+e);return false;}
  }
  private View find(View v,int id,int depth,int[] budget){
-  if(v==null||depth>28||--budget[0]<0||v.getVisibility()!=View.VISIBLE)return null;
-  if(iconClass.isInstance(v)&&v.isAttachedToWindow()&&v.isShown()){
+  if(v==null||depth>28||--budget[0]<0)return null;
+  if(iconClass.isInstance(v)&&v.isAttachedToWindow()){
    try{if(((Integer)XposedHelpers.callMethod(v,"getItemId"))==id)return v;}catch(Throwable ignored){}
   }
   if(v instanceof ViewGroup){
@@ -171,7 +204,8 @@ final class UninstallBridge {
  private final class Pending{
   final WeakReference<View> root,anchor;final RectF box;final Bitmap bitmap;
   final String pkg;final ComponentName component;final UserHandle user;final LauncherApps la;
-  final int width,height;boolean registered,confirmed;long removedAt;
+  final int width,height;boolean registered,confirmed;long removedAt;Context receiverContext;
+  final BroadcastReceiver removalReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){if(!Intent.ACTION_PACKAGE_REMOVED.equals(i.getAction())||i.getBooleanExtra(Intent.EXTRA_REPLACING,false)||i.getData()==null||!pkg.equals(i.getData().getSchemeSpecificPart())||pending!=Pending.this||confirmed)return;try{c.getPackageManager().getApplicationInfo(pkg,0);return;}catch(PackageManager.NameNotFoundException expected){} confirmed=true;removedAt=SystemClock.uptimeMillis();log("confirmed package removal broadcast: "+pkg);tryPlay(Pending.this);}};
   final Runnable expire=()->clear(this);
   final LauncherApps.Callback callback=new LauncherApps.Callback(){
    public void onPackageRemoved(String name,UserHandle u){
@@ -191,10 +225,10 @@ final class UninstallBridge {
   if(pending!=q)return;
   try{
    View r=q.root.get(),a=q.anchor.get();long elapsed=SystemClock.uptimeMillis()-q.removedAt;
-   if(r==null||!r.isAttachedToWindow()||r.getWidth()!=q.width||r.getHeight()!=q.height||elapsed>1600){clear(q);return;}
-   if(!r.hasWindowFocus()||!r.isShown()||(elapsed<250&&a!=null&&a.isAttachedToWindow()&&a.isShown())){main.postDelayed(()->tryPlay(q),16);return;}
+   if(r==null||!r.isAttachedToWindow()||r.getWidth()!=q.width||r.getHeight()!=q.height||elapsed>4000){log("root unavailable/timeout");clear(q);return;}
+   if(!r.hasWindowFocus()||!r.isShown()||(elapsed<100&&a!=null&&a.isAttachedToWindow()&&a.isShown())){main.postDelayed(()->tryPlay(q),16);return;}
    // Do not animate on an icon that is still present: preserve stock behavior.
-   if(a!=null&&a.isAttachedToWindow()&&a.isShown()&&a.getAlpha()>.05f){clear(q);log("icon still present; stock fallback");return;}
+   if(a!=null&&a.isAttachedToWindow()&&a.isShown()&&a.getAlpha()>.05f&&elapsed<650){main.postDelayed(()->tryPlay(q),16);return;}
    if(ParticleEffect.play(r,q.bitmap,q.box,true))log("uninstall particles played");
    clear(q);
   }catch(Throwable t){clear(q);log("uninstall effect fallback: "+t);}
@@ -203,7 +237,8 @@ final class UninstallBridge {
   if(q==null)return;if(pending==q)pending=null;
   main.removeCallbacks(q.expire);
   if(q.registered){q.registered=false;try{q.la.unregisterCallback(q.callback);}catch(Throwable ignored){}}
+  if(q.receiverContext!=null){try{q.receiverContext.unregisterReceiver(q.removalReceiver);}catch(RuntimeException ignored){}q.receiverContext=null;}
   if(!q.bitmap.isRecycled())q.bitmap.recycle();
  }
- private static void log(String msg){XposedBridge.log("AppDeleteFX 0.4: "+msg);}
+ private static void log(String msg){XposedBridge.log("AppDeleteFX 0.5: "+msg);}
 }

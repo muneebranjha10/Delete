@@ -17,3 +17,6 @@ New uninstall path captures the exact selected icon before the confirmation dial
 
 ## 0.4 alpha
 Opt-in one-tap uninstall via existing launcher DELETE_PACKAGES permission and PackageInstaller, scoped to the explicit stock Uninstall click and its final PackageUtils intent launch. No extra root grant. Only downloaded apps in current non-managed user; stock confirmation remains when permission, preferences or icon capture are missing, or Android requires confirmation. Enable the toggle in the module app after LSPosed activation. Local app data may be deleted. Corrected IconViewChild.getView() based on supplied APK (IconViewChild is an interface, not a View); reduced particle travel and white tint to better preserve the purple reference. Runtime and visual match unverified.
+
+## 0.5 alpha
+Capture original icon on touch-down before the long-press popup changes visibility. Match snapshot by selected item ID. Fall back to attached icon lookup including hidden views. Add package-removed broadcast backup with package absence check, and increase focus wait to 4 seconds. Log load, click, snapshot, confirmed removal and render stages. No change to particle design or one-tap eligibility. Runtime not yet validated.
